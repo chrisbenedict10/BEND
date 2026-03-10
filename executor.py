@@ -74,10 +74,6 @@
 
 
 
-
-
-
-
 """
 Module 3: Action Executor
 Takes the structured JSON action from the brain and executes
@@ -304,27 +300,25 @@ def _write_file(path, content):
 
 def _play_spotify_song(song_name: str):
     """
-    Dedicated Spotify song player.
-    Strategy:
-    1. Open Spotify
-    2. Search for song using Ctrl+L
-    3. Wait for Top Result to appear
-    4. Calculate position of the green play button (always at ~57% x, ~28% y in the window)
-    5. Click it directly using pyautogui
+    Dedicated Spotify song player using Win32 API to find and click
+    the green play button precisely.
     """
+    import ctypes
+    import ctypes.wintypes
+
     if not song_name:
         print("⚠️ No song name provided.")
         return
 
     print(f"🎵 Playing '{song_name}' on Spotify...")
 
-    # Step 1: Open / Focus Spotify
+    # --- Step 1: Open / focus Spotify ---
     _open_app("spotify")
     print("⏳ Waiting for Spotify to load...")
     time.sleep(5)
 
-    # Step 2: Focus search bar and clear it completely
-    print("🔍 Focusing search bar...")
+    # --- Step 2: Search for the song ---
+    print("🔍 Focusing search bar and clearing...")
     pyautogui.hotkey("ctrl", "l")
     time.sleep(0.8)
     pyautogui.hotkey("ctrl", "a")
@@ -332,61 +326,92 @@ def _play_spotify_song(song_name: str):
     pyautogui.press("backspace")
     time.sleep(0.5)
 
-    # Step 3: Type song name slowly character by character
-    print(f"⌨️ Typing: {song_name}")
+    print(f"⌨️  Typing: {song_name}")
     for char in song_name:
         pyautogui.typewrite(char if char.isascii() else '?', interval=0.07)
-    print("⏳ Waiting for Top Result to load...")
-    time.sleep(4.5)
 
-    # Step 4: Find the Spotify window position and click the green play button
-    # The green play button in the Top Result card is ALWAYS at ~57% x, ~28% y of the window
+    print("⏳ Waiting 5 seconds for Top Result to load...")
+    time.sleep(5)
+
+    # --- Step 3: Find Spotify window via PowerShell (most reliable) ---
+    user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    hwnd = 0
+
+    # Use PowerShell + .NET to enumerate all windows and find Spotify
     try:
-        from pywinauto import Desktop
-        wins = Desktop(backend="uia").windows()
-        spotify_win = None
-        for w in wins:
-            try:
-                title = w.window_text()
-                if "spotify" in title.lower() or w.is_visible():
-                    # Check if it's likely Spotify by class or title
-                    cls = w.element_info.class_name or ""
-                    if "spotify" in title.lower() or "chrome_widget_win" in cls.lower():
-                        spotify_win = w
-                        break
-            except:
-                continue
-
-        if spotify_win:
-            rect = spotify_win.rectangle()
-            win_x = rect.left
-            win_y = rect.top
-            win_w = rect.width()
-            win_h = rect.height()
-
-            # The green play button in the Top Result:
-            # Horizontally: at about 56-57% of the window width
-            # Vertically: at about 27-28% of the window height (below title bar ~40px)
-            btn_x = int(win_x + win_w * 0.565)
-            btn_y = int(win_y + win_h * 0.275)
-
-            print(f"🖱️  Clicking green play button at ({btn_x}, {btn_y})...")
-            pyautogui.moveTo(btn_x, btn_y, duration=0.4)
-            time.sleep(0.3)
-            pyautogui.click()
-            print(f"▶️  Clicked play for '{song_name}'.")
-        else:
-            # Fallback: use Tab + Enter navigation
-            print("⚠️ Could not find Spotify window. Using keyboard fallback...")
-            for _ in range(3):
-                pyautogui.press("tab")
-                time.sleep(0.3)
-            pyautogui.press("enter")
+        result = subprocess.run(
+            ["powershell", "-Command",
+             "[void][System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic');"
+             "$app = (Get-Process -Name Spotify -ErrorAction SilentlyContinue | Select-Object -First 1);"
+             "if ($app) { $app.MainWindowHandle }"],
+            capture_output=True, text=True, timeout=5
+        )
+        hwnd_str = result.stdout.strip()
+        if hwnd_str.isdigit():
+            hwnd = int(hwnd_str)
+            print(f"✅ Found Spotify HWND via PowerShell: {hwnd}")
     except Exception as e:
-        print(f"⚠️ Click failed: {e}. Using keyboard fallback.")
+        print(f"⚠️ PowerShell window find failed: {e}")
+
+    # Fallback: manual EnumWindows
+    if not hwnd:
+        print("🔍 Trying manual window scan...")
+        found = ctypes.wintypes.HWND(0)
+        WNDENUMPROC = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
+            ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM
+        )
+        def _cb(h, _):
+            nonlocal found
+            buf = ctypes.create_unicode_buffer(256)
+            user32.GetWindowTextW(h, buf, 256)
+            if "spotify" in buf.value.lower() and user32.IsWindowVisible(h):
+                found = ctypes.wintypes.HWND(h)
+                return False
+            return True
+        user32.EnumWindows(WNDENUMPROC(_cb), 0)
+        hwnd = found.value
+
+    if hwnd:
+        # Restore (un-minimize) and bring to FRONT — critical!
+        user32.ShowWindow(hwnd, 9)    # SW_RESTORE = 9
+        time.sleep(0.3)
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(1.0)               # Wait a full second for Spotify to be in focus
+
+        # Get window rectangle (used as the search region for color detection)
+        rect = ctypes.wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        win_x = rect.left
+        win_y = rect.top
+        win_w = rect.right - rect.left
+        win_h = rect.bottom - rect.top
+
+        print(f"📐 Spotify window: pos=({win_x},{win_y}) size=({win_w}x{win_h})")
+
+        # --- PRIMARY: Color-based click (finds Spotify green #1DB954) ---
+        import screen_reader
+        window_rect = (win_x, win_y, win_w, win_h)
+        clicked = screen_reader.click_spotify_play_button(window_rect=window_rect)
+
+        if not clicked:
+            # --- FALLBACK: Coordinate-based click ---
+            print("⚠️  Color detection failed. Using coordinate fallback...")
+            btn_x = int(win_x + win_w * 0.565)
+            btn_y = int(win_y + win_h * 0.283)
+            print(f"🖱️  Clicking at coordinate ({btn_x}, {btn_y})...")
+            pyautogui.moveTo(btn_x, btn_y, duration=0.5)
+            time.sleep(0.5)
+            pyautogui.click()
+
+        print(f"▶️  Play triggered for '{song_name}'.")
+    else:
+        print("⚠️  Could not locate Spotify window. Using keyboard fallback...")
+        pyautogui.press("tab")
+        time.sleep(0.3)
+        pyautogui.press("tab")
+        time.sleep(0.3)
         pyautogui.press("enter")
-        time.sleep(0.5)
-        pyautogui.press("enter")
+        print("▶️  Used keyboard Enter fallback.")
 
 
 def _create_folder(path):
@@ -497,13 +522,14 @@ def _wait(seconds):
 
 
 def _click_element(text):
-    """Finds a UI element by text and clicks it."""
+    """Finds a UI element by text and clicks it. Gracefully warns if not found."""
     if not text:
         return
     print(f"👁️  Searching for element to click: {text}")
     success = vision_engine.click_on_text(text)
     if not success:
-        raise Exception(f"Could not find UI element '{text}' on screen.")
+        # Don't raise — just warn. Spotify and other apps may not expose UI elements.
+        print(f"⚠️  Could not find UI element '{text}'. Skipping click.")
 
 
 def _vision_scan():

@@ -160,6 +160,11 @@ User: "Play Die With A Smile on Spotify"
   {"action": "play_spotify", "parameters": {"song": "Die With A Smile Lady Gaga"}, "spoken_response": "Playing Die With A Smile on Spotify for you."}
 ]
 
+User: "Play The Night We Met"
+[
+  {"action": "play_spotify", "parameters": {"song": "The Night We Met Lord Huron"}, "spoken_response": "Playing The Night We Met on Spotify."}
+]
+
 User: "Play some Taylor Swift"
 [
   {"action": "play_spotify", "parameters": {"song": "Taylor Swift"}, "spoken_response": "Playing Taylor Swift on Spotify."}
@@ -194,6 +199,7 @@ RULES
 - For complex tasks, break them into MANY small steps. More steps = more reliable.
 - If ambiguous, ask for clarification via chat_response.
 - CRITICAL: NEVER REFUSE to open apps like WhatsApp, YouTube, Instagram, etc. You CAN open them on PC using the "open_app" action with their name (e.g. "whatsapp", "youtube"). The executor handles opening their web versions automatically. Do your best to fulfill the request.
+- ⚠️ SPOTIFY/MUSIC RULE: For ANY music/song playback request, ALWAYS use "play_spotify" with the song and artist name. NEVER use "click_element", "vision_scan", or "open_app + key_press" for music. "play_spotify" is a single dedicated action that handles everything.
 """
 
 

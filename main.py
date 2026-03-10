@@ -11,6 +11,7 @@ Press [Esc] at any time to quit.
 
 import keyboard
 import threading
+import time
 import stt
 import brain
 import executor
@@ -23,27 +24,23 @@ BANNER = f"""
 ║                                                  ║
 ║       🤖     B E N D  Voice Assistant    🤖      ║
 ║                                                  ║
-║   Hold [ENTER] Key to Speak                      ║
+║   Say "HEY BEND" to activate                     ║
 ║   Press [Esc]    to quit                         ║
 ║                                                  ║
 ╚══════════════════════════════════════════════════╝
 """
 
 
-def run_once():
-    """Single cycle of listening, thinking, and executing."""
-    
-    # 1. Listen for command (Hold Enter to talk)
-    user_text = stt.listen_hold_to_talk("enter")
-        
-    if not user_text:
+def process_command(user_text):
+    """Send command to AI Brain, execute steps, and speak responses."""
+    if not user_text or user_text is True:
         return
 
-    # 3. Send to AI Brain
+    # Send to AI Brain
     print("🧠 Thinking...")
     steps = brain.think(user_text)
 
-    # Step 3 & 4: Execute each step and speak its response
+    # Execute each step and speak its response
     for i, step in enumerate(steps):
         print(f"\n--- Step {i + 1}/{len(steps)} ---")
 
@@ -75,13 +72,25 @@ def main():
 
     while True:
         try:
-            run_once()
+            # 1. Continuous Listening for Wake Word
+            result = stt.listen_continuously(config.WAKE_PHRASE)
+            
+            if result is True:
+                # Only wake word was heard, ask "How can I help?"
+                tts.speak("How can I help?")
+                command = stt.listen()
+                if command:
+                    process_command(command)
+            elif isinstance(result, str):
+                # Inline command heard (e.g. "Hey Bend open notepad")
+                process_command(result)
+                
         except KeyboardInterrupt:
             print("\n👋 Interrupted. Shutting down.")
             break
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
-            tts.speak("Something went wrong. Let's try again.")
+            print(f"❌ Unexpected error in loop: {e}")
+            time.sleep(1) # Short pause before retry
 
 
 if __name__ == "__main__":
