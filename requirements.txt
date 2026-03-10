@@ -1,0 +1,7 @@
+SpeechRecognition
+PyAudio
+pyautogui
+pyttsx3
+requests
+keyboard
+python-dotenv
