@@ -3,5 +3,7 @@ PyAudio
 pyautogui
 pyttsx3
 requests
+pywinauto
+Pillow
 keyboard
 python-dotenv

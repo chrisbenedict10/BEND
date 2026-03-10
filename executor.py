@@ -1,3 +1,83 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 """
 Module 3: Action Executor
 Takes the structured JSON action from the brain and executes
@@ -10,6 +90,7 @@ import subprocess
 import webbrowser
 import pyautogui
 import config
+import vision_engine
 
 
 # Map of common app names to their Windows executable names or paths
@@ -80,6 +161,12 @@ def execute(action_dict):
             _close_app(params.get("name", ""))
         elif action == "key_press":
             _key_press(params.get("keys", ""))
+        elif action == "click_element":
+            _click_element(params.get("text", ""))
+        elif action == "vision_scan":
+            return _vision_scan()
+        elif action == "play_spotify":
+            _play_spotify_song(params.get("song", ""))
         elif action == "wait":
             _wait(params.get("seconds", 1))
         elif action == "chat_response":
@@ -215,6 +302,93 @@ def _write_file(path, content):
         raise
 
 
+def _play_spotify_song(song_name: str):
+    """
+    Dedicated Spotify song player.
+    Strategy:
+    1. Open Spotify
+    2. Search for song using Ctrl+L
+    3. Wait for Top Result to appear
+    4. Calculate position of the green play button (always at ~57% x, ~28% y in the window)
+    5. Click it directly using pyautogui
+    """
+    if not song_name:
+        print("⚠️ No song name provided.")
+        return
+
+    print(f"🎵 Playing '{song_name}' on Spotify...")
+
+    # Step 1: Open / Focus Spotify
+    _open_app("spotify")
+    print("⏳ Waiting for Spotify to load...")
+    time.sleep(5)
+
+    # Step 2: Focus search bar and clear it completely
+    print("🔍 Focusing search bar...")
+    pyautogui.hotkey("ctrl", "l")
+    time.sleep(0.8)
+    pyautogui.hotkey("ctrl", "a")
+    time.sleep(0.3)
+    pyautogui.press("backspace")
+    time.sleep(0.5)
+
+    # Step 3: Type song name slowly character by character
+    print(f"⌨️ Typing: {song_name}")
+    for char in song_name:
+        pyautogui.typewrite(char if char.isascii() else '?', interval=0.07)
+    print("⏳ Waiting for Top Result to load...")
+    time.sleep(4.5)
+
+    # Step 4: Find the Spotify window position and click the green play button
+    # The green play button in the Top Result card is ALWAYS at ~57% x, ~28% y of the window
+    try:
+        from pywinauto import Desktop
+        wins = Desktop(backend="uia").windows()
+        spotify_win = None
+        for w in wins:
+            try:
+                title = w.window_text()
+                if "spotify" in title.lower() or w.is_visible():
+                    # Check if it's likely Spotify by class or title
+                    cls = w.element_info.class_name or ""
+                    if "spotify" in title.lower() or "chrome_widget_win" in cls.lower():
+                        spotify_win = w
+                        break
+            except:
+                continue
+
+        if spotify_win:
+            rect = spotify_win.rectangle()
+            win_x = rect.left
+            win_y = rect.top
+            win_w = rect.width()
+            win_h = rect.height()
+
+            # The green play button in the Top Result:
+            # Horizontally: at about 56-57% of the window width
+            # Vertically: at about 27-28% of the window height (below title bar ~40px)
+            btn_x = int(win_x + win_w * 0.565)
+            btn_y = int(win_y + win_h * 0.275)
+
+            print(f"🖱️  Clicking green play button at ({btn_x}, {btn_y})...")
+            pyautogui.moveTo(btn_x, btn_y, duration=0.4)
+            time.sleep(0.3)
+            pyautogui.click()
+            print(f"▶️  Clicked play for '{song_name}'.")
+        else:
+            # Fallback: use Tab + Enter navigation
+            print("⚠️ Could not find Spotify window. Using keyboard fallback...")
+            for _ in range(3):
+                pyautogui.press("tab")
+                time.sleep(0.3)
+            pyautogui.press("enter")
+    except Exception as e:
+        print(f"⚠️ Click failed: {e}. Using keyboard fallback.")
+        pyautogui.press("enter")
+        time.sleep(0.5)
+        pyautogui.press("enter")
+
+
 def _create_folder(path):
     """Create a new folder at the specified path. Supports ~ for home directory."""
     if not path:
@@ -315,9 +489,37 @@ def _key_press(keys):
 
 def _wait(seconds):
     """Pause execution for a given number of seconds."""
+    if not isinstance(seconds, (int, float)):
+        seconds = 1
     seconds = min(max(float(seconds), 0.5), 10)  # Clamp between 0.5 and 10
     print(f"⏳ Waiting {seconds}s...")
     time.sleep(seconds)
+
+
+def _click_element(text):
+    """Finds a UI element by text and clicks it."""
+    if not text:
+        return
+    print(f"👁️  Searching for element to click: {text}")
+    success = vision_engine.click_on_text(text)
+    if not success:
+        raise Exception(f"Could not find UI element '{text}' on screen.")
+
+
+def _vision_scan():
+    """Scans the screen and returns a summary of buttons found."""
+    print("👁️  Scanning screen for UI elements...")
+    elements = vision_engine.scan_ui_elements()
+    if not elements:
+        return "I can't see any buttons or elements on the screen right now."
+    
+    # Create a nice summary for the AI
+    summary = "Visible UI Elements:\n"
+    for el in elements[:15]: # Limit to 15 to stay focused
+        summary += f"- {el['type']}: '{el['text']}'\n"
+    
+    # We return the summary so it can be used as a spoken response or context
+    return summary
 
 
 if __name__ == "__main__":

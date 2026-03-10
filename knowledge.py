@@ -80,14 +80,23 @@ MICROSOFT EXCEL SHORTCUTS:
 """,
 
     "spotify": """
-SPOTIFY SHORTCUTS:
+SPOTIFY AUTOMATION (Visual Selection):
+If asked to play a specific song/artist:
+1. open_app "spotify"
+2. wait 5 seconds (loading takes time)
+3. key_press "ctrl+l" (focus search bar)
+4. key_press "ctrl+a", then key_press "backspace" (clear search)
+5. type_text "<song/artist name>"
+6. wait 4 seconds (wait for the GREEN play button to appear in the top results)
+7. vision_scan (look for a button named "Play" or "Play <Song>")
+8. click_element with the text found in the TOP results area (NOT the player bar at bottom)
+9. If vision fails: key_press "enter", wait 1, key_press "enter".
+
+Other Spotify Shortcuts:
 - Play/Pause: space
 - Next/Prev track: ctrl+right, ctrl+left
 - Volume up/down: ctrl+up, ctrl+down
-- Max vol / Mute: ctrl+shift+up, ctrl+shift+down
 - Search / Focus search: ctrl+f, ctrl+l
-- New playlist / folder: ctrl+n, ctrl+shift+n
-- Toggle repeat / shuffle: ctrl+r, ctrl+s
 """,
 
     "zoom": """
