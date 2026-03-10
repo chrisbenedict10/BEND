@@ -74,6 +74,8 @@ def execute(action_dict):
             _system_command(params.get("command", ""))
         elif action == "write_file":
             _write_file(params.get("path", ""), params.get("content", ""))
+        elif action == "create_folder":
+            _create_folder(params.get("path", ""))
         elif action == "close_app":
             _close_app(params.get("name", ""))
         elif action == "key_press":
@@ -210,6 +212,25 @@ def _write_file(path, content):
         raise Exception(f"Permission denied. I can't write to {path}. Try a different location like your home folder.")
     except Exception as e:
         print(f"   Failed to write file: {e}")
+        raise
+
+
+def _create_folder(path):
+    """Create a new folder at the specified path. Supports ~ for home directory."""
+    if not path:
+        return
+    
+    path = os.path.expanduser(path)
+    print(f"📁 Creating folder: {path}")
+    
+    try:
+        os.makedirs(path, exist_ok=True)
+        print(f"   Successfully created folder.")
+    except PermissionError:
+        print(f"   Permission denied to create folder: {path}")
+        raise Exception(f"Permission denied. I can't create a folder at {path}.")
+    except Exception as e:
+        print(f"   Failed to create folder: {e}")
         raise
 
 
