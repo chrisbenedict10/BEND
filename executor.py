@@ -163,6 +163,8 @@ def execute(action_dict):
             return _vision_scan()
         elif action == "play_spotify":
             _play_spotify_song(params.get("song", ""))
+        elif action == "media_control":
+            _media_control(params.get("command", ""))
         elif action == "wait":
             _wait(params.get("seconds", 1))
         elif action == "chat_response":
@@ -388,14 +390,24 @@ def _play_spotify_song(song_name: str):
 
         print(f"📐 Spotify window: pos=({win_x},{win_y}) size=({win_w}x{win_h})")
 
-        # --- PRIMARY: Color-based click (finds Spotify green #1DB954) ---
+        # --- PRIMARY: Visual Template Match (Most accurate with user assets) ---
         import screen_reader
+        if screen_reader.click_spotify_green_button():
+            print(f"▶️  Play triggered via template matching for '{song_name}'.")
+            return
+            
+        # --- SECONDARY: Color-based click (finds Spotify green #1DB954) ---
         window_rect = (win_x, win_y, win_w, win_h)
         clicked = screen_reader.click_spotify_play_button(window_rect=window_rect)
 
         if not clicked:
-            # --- FALLBACK: Coordinate-based click ---
-            print("⚠️  Color detection failed. Using coordinate fallback...")
+            # --- FALLBACK 1: Try Enter (often triggers Top Result) ---
+            print("⚠️  Color detection failed. Trying Enter key fallback...")
+            pyautogui.press("enter")
+            time.sleep(1.0) # Wait to see if playback starts (user can hear it)
+            
+            # --- FALLBACK 2: Coordinate-based click ---
+            print("🖱️  Still no success? Trying coordinate fallback...")
             btn_x = int(win_x + win_w * 0.565)
             btn_y = int(win_y + win_h * 0.283)
             print(f"🖱️  Clicking at coordinate ({btn_x}, {btn_y})...")
@@ -495,6 +507,37 @@ def _close_app(name):
         ["powershell", "-Command", f"Stop-Process -Name '{process_name}' -Force -ErrorAction SilentlyContinue"],
         capture_output=True,
     )
+
+
+def _media_control(command):
+    """
+    Control media playback (play/pause, next, prev).
+    Prioritizes visual template clicking, falls back to Global Media Keys.
+    """
+    import screen_reader
+    import pyautogui
+    cmd_lower = command.lower().strip()
+    print(f"🎵 Media Control: {cmd_lower}")
+    
+    # Try visual match first for Spotify UI (since user provided them)
+    try:
+        sp_check = subprocess.run(["powershell", "Get-Process Spotify -ErrorAction SilentlyContinue"], capture_output=True, text=True)
+        if "spotify" in sp_check.stdout.lower():
+            if screen_reader.click_spotify_media_bar(cmd_lower):
+                print(f"✅ Executed {cmd_lower} via visual template.")
+                return
+    except Exception:
+        pass
+
+    # Fallback to Global Media Keys
+    if cmd_lower in ["play", "pause", "play/pause", "toggle"]:
+        pyautogui.press("playpause")
+    elif cmd_lower in ["next", "skip"]:
+        pyautogui.press("nexttrack")
+    elif cmd_lower in ["prev", "previous", "back"]:
+        pyautogui.press("prevtrack")
+    else:
+        print(f"⚠️  Unknown media command: {command}")
 
 
 def _key_press(keys):

@@ -189,6 +189,68 @@ def find_text_on_screen(search_text, region=None):
     return None
 
 
+def find_template_on_screen(template_path, confidence=0.8, region=None):
+    """Find a template image on the screen and return its center coordinates."""
+    if not os.path.exists(template_path):
+        print(f"⚠️ Template not found: {template_path}")
+        return None
+    try:
+        pos = pyautogui.locateCenterOnScreen(template_path, confidence=confidence, region=region)
+        if pos:
+            print(f"✅ Template found at {pos}: {os.path.basename(template_path)}")
+            return pos
+    except Exception as e:
+        print(f"⚠️ Template search error ({os.path.basename(template_path)}): {e}")
+    return None
+
+
+def click_spotify_media_bar(action="pause"):
+    """
+    Finds the Spotify media bar (Shuffle, Prev, Play/Pause, Next, Repeat)
+    and clicks the specific button within it.
+    """
+    bar_path = os.path.join("assets", "media_bar.png")
+    bar_pos = find_template_on_screen(bar_path, confidence=0.7) # Lower confidence as themes change
+    
+    if not bar_pos:
+        return False
+    
+    bx, by = bar_pos
+    # Offsets based on the visual layout of media_bar.png (centered on the pause button)
+    # The bar has 5 buttons: Shuffle, Prev, Play/Pause, Next, Repeat
+    # If bx, by is the center (the white play/pause button), then offsets are:
+    offsets = {
+        "prev": (-65, 0),
+        "pause": (0, 0),
+        "play": (0, 0),
+        "next": (65, 0),
+        "shuffle": (-130, 0),
+        "repeat": (130, 0),
+    }
+    
+    off_x, off_y = offsets.get(action.lower(), (0, 0))
+    target_x = bx + off_x
+    target_y = by + off_y
+    
+    print(f"🖱️  Clicking Spotify {action} at ({target_x}, {target_y})...")
+    pyautogui.moveTo(target_x, target_y, duration=0.4)
+    time.sleep(0.3)
+    pyautogui.click()
+    return True
+
+
+def click_spotify_green_button():
+    """Clicks the large green play button (#1DB954) using template matching fallback."""
+    btn_path = os.path.join("assets", "play_button_green.png")
+    pos = find_template_on_screen(btn_path, confidence=0.8)
+    if pos:
+        pyautogui.moveTo(pos[0], pos[1], duration=0.4)
+        time.sleep(0.3)
+        pyautogui.click()
+        return True
+    return False
+
+
 def scan_screen_summary(region=None):
     """
     Return a quick text summary of what colors and approximate button areas
@@ -198,14 +260,21 @@ def scan_screen_summary(region=None):
     h, w, _ = img.shape
     summary = [f"Screen area: {w}x{h}"]
 
-    # Check for Spotify green
+    # Use Template matching for better debugging
+    if find_template_on_screen(os.path.join("assets", "media_bar.png"), confidence=0.75):
+        summary.append("🟢 Spotify media bar (Pause/Play) visible.")
+    if find_template_on_screen(os.path.join("assets", "play_button_green.png"), confidence=0.85):
+        summary.append("🟢 Spotify GREEN play button visible.")
+
+    # Check for Spotify green color
     pos = find_spotify_play_button()
     if pos:
-        summary.append(f"🟢 Spotify green button at {pos}")
-    else:
-        summary.append("🔴 No Spotify green button visible")
-
+        summary.append(f"🟢 Spotify green color-match at {pos}")
+    
     return "\n".join(summary)
+
+
+import os
 
 
 # ---------------------------------------------------------------------------
