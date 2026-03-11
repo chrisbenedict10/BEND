@@ -163,6 +163,8 @@ def execute(action_dict):
             return _vision_scan()
         elif action == "play_spotify":
             _play_spotify_song(params.get("song", ""))
+        elif action == "whatsapp_message":
+            _send_whatsapp_message(params.get("contact", ""), params.get("message", ""))
         elif action == "media_control":
             _media_control(params.get("command", ""))
         elif action == "wait":
@@ -415,15 +417,178 @@ def _play_spotify_song(song_name: str):
             time.sleep(0.5)
             pyautogui.click()
 
-        print(f"▶️  Play triggered for '{song_name}'.")
+        print(f"▶️  Used keyboard Enter fallback.")
+
+
+def _send_whatsapp_message(contact: str, message: str):
+    """
+    Dedicated WhatsApp message sender. Handles opening, searching,
+    selecting contact, and typing the message.
+    """
+    import ctypes
+    import ctypes.wintypes
+    user32 = ctypes.windll.user32
+    
+    if not contact:
+        print("⚠️ No contact provided for WhatsApp.")
+        return
+
+    print(f"💬 Preparing to message '{contact}' on WhatsApp...")
+
+    # --- Step 1: Find and Focus WhatsApp Window ---
+    hwnd = 0
+    try:
+        # Try finding via PowerShell first
+        result = subprocess.run(
+            ["powershell", "-Command",
+             "(Get-Process -Name WhatsApp -ErrorAction SilentlyContinue | Select-Object -First 1).MainWindowHandle"],
+            capture_output=True, text=True, timeout=5
+        )
+        hwnd_str = result.stdout.strip()
+        if hwnd_str.isdigit():
+            hwnd = int(hwnd_str)
+    except Exception:
+        pass
+
+    if not hwnd:
+        print("🚀 WhatsApp process not found. Launching...")
+        _open_app("whatsapp")
+        time.sleep(7) # Give it extra time to boot
+        # Try to get the handle again after launch
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "(Get-Process -Name WhatsApp -ErrorAction SilentlyContinue | Select-Object -First 1).MainWindowHandle"],
+                capture_output=True, text=True, timeout=5
+            )
+            hwnd_str = result.stdout.strip()
+            if hwnd_str.isdigit():
+                hwnd = int(hwnd_str)
+        except Exception:
+            pass
+    
+    wa_win = None
+    win_x, win_y, win_w, win_h = 0, 0, 0, 0
+    if hwnd:
+        print(f"✅ Found WhatsApp HWND: {hwnd}. Bringing to front.")
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        time.sleep(0.3)
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(1.0)
+        
+        # Get window geometry for coordinate fallbacks
+        rect = ctypes.wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        win_x, win_y = rect.left, rect.top
+        win_w, win_h = rect.right - rect.left, rect.bottom - rect.top
+        print(f"📐 WhatsApp window: {win_w}x{win_h} at ({win_x}, {win_y})")
+        
+        try:
+            from pywinauto import Application
+            wa_app = Application(backend="uia").connect(handle=hwnd)
+            wa_win = wa_app.window(handle=hwnd)
+        except Exception as e:
+            print(f"⚠️ pywinauto connection failed: {e}")
     else:
-        print("⚠️  Could not locate Spotify window. Using keyboard fallback...")
-        pyautogui.press("tab")
-        time.sleep(0.3)
-        pyautogui.press("tab")
-        time.sleep(0.3)
+        print("⚠️  Could not find WhatsApp window handle. Proceeding with keyboard focus.")
+        _open_app("whatsapp")
+        time.sleep(3)
+
+    # --- Step 2: Focus the Global Search Bar ---
+    print(f"🔍 Searching for contact: {contact}")
+    search_focused = False
+    
+    # Method A: Direct pywinauto search
+    if wa_win:
+        try:
+            # Try multiple titles common in WhatsApp versions
+            for title in ["Search or start a new chat", "Search", "Search contacts"]:
+                search_el = wa_win.child_window(title=title, control_type="Edit")
+                if search_el.exists(timeout=0.3):
+                    print(f"✅ Found search bar via pywinauto: '{title}'")
+                    search_el.click_input()
+                    search_focused = True
+                    break
+            
+            if not search_focused:
+                # Direct Edit control search (often the first edit in the sidebar)
+                all_edits = wa_win.descendants(control_type="Edit")
+                if all_edits:
+                    all_edits[0].click_input()
+                    print("✅ Clicked first Edit control (potential search bar).")
+                    search_focused = True
+        except Exception:
+            pass
+
+    # Method B: Relative Coordinates (Most resilient if layout is standard)
+    if not search_focused and win_w > 0:
+        # Based on standard WhatsApp Desktop layout: Search is roughly at 15% width, 12% height
+        rx = int(win_x + win_w * 0.18)
+        ry = int(win_y + win_h * 0.12)
+        print(f"🖱️  Trying coordinate-based fallback for search: ({rx}, {ry})")
+        pyautogui.click(rx, ry)
+        search_focused = True
+
+    # Method C: Keyboard Shortcuts (Always run as a finisher to be safe)
+    if not search_focused:
+        print("⌨️  Using keyboard shortcuts for search...")
+        pyautogui.hotkey("ctrl", "f")
+        time.sleep(0.5)
+
+    # Clear anything in the box and type
+    pyautogui.hotkey("ctrl", "a")
+    time.sleep(0.2)
+    pyautogui.press("backspace")
+    time.sleep(0.3)
+
+    # Type contact name slowly and carefully
+    for char in contact:
+        pyautogui.write(char, interval=0.08)
+    
+    # Step 3: Wait for search results
+    print("⏳ Waiting for search results to appear...")
+    time.sleep(4.0)
+
+    # Step 4: Select first result
+    # In some versions, typing already focuses the first result.
+    # We press down just in case, then enter.
+    pyautogui.press("down")
+    time.sleep(0.6)
+    pyautogui.press("enter")
+    
+    # Step 5: Wait for chat to load
+    print("⏳ Waiting for chat to load...")
+    time.sleep(2.0)
+
+    # Step 6: Type and send message
+    if message:
+        print(f"⌨️  Typing message: {message}")
+        
+        # Try to focus the message box using direct pywinauto or coordinates
+        chat_focused = False
+        if wa_win:
+            try:
+                msg_el = wa_win.child_window(title="Type a message", control_type="Edit")
+                if msg_el.exists(timeout=0.3):
+                    msg_el.click_input()
+                    chat_focused = True
+            except Exception:
+                pass
+        
+        if not chat_focused and win_w > 0:
+            # Message box is usually at 60% width, 92% height
+            mx = int(win_x + win_w * 0.60)
+            my = int(win_y + win_h * 0.92)
+            print(f"🖱️  Trying coordinate-based fallback for message: ({mx}, {my})")
+            pyautogui.click(mx, my)
+        
+        # Final type and send
+        pyautogui.write(message, interval=0.04)
+        time.sleep(0.8)
         pyautogui.press("enter")
-        print("▶️  Used keyboard Enter fallback.")
+        print("✅ Message sent!")
+    else:
+        print("ℹ️  No message provided, just opened the chat.")
 
 
 def _create_folder(path):

@@ -7,21 +7,14 @@ mentions the specific application, to save tokens and prevent confusion.
 
 APP_SHORTCUTS = {
     "whatsapp": """
-WHATSAPP AUTOMATION (Calls & Messages):
-If asked to text/call someone on WhatsApp:
-1. open_app "whatsapp"
-2. wait 5 seconds (it takes time to load)
-3. key_press "ctrl+f", wait 1 sec (focuses search box on Desktop App)
-4. type_text "<contact name>"
-5. wait 2.5 seconds (VERY IMPORTANT for results to populate)
-6. key_press "down", wait 0.5 sec, key_press "enter" (The 'down' key precisely selects the first result)
-7. wait 1.5 seconds (wait for chat to load)
-8. For messages: type_text "<message>", wait 1, key_press "enter"
-   For audio call: key_press "ctrl+shift+a"
-   For video call: key_press "ctrl+shift+v"
-NOTE: If searching doesn't work, BEND should try click_element "<contact name>" to visually pick the result from the list.
+WHATSAPP AUTOMATION (Reliable Messaging):
+- For ANY request to text/call someone or open a chat on WhatsApp:
+- ALWAYS use the single "whatsapp_message" action with parameters: { "contact": "<name>", "message": "<text>" }.
+- NEVER break it down into "open_app", "wait", and "key_press" steps yourself.
+- The "whatsapp_message" action in the executor handles the entire sequence: opening the app, searching for the contact, and typing the message.
 
-Other WhatsApp Shortcuts:
+Other WhatsApp Shortcuts (for manual control):
+- Focus search: ctrl+f
 - New chat: ctrl+n
 - Mark unread: ctrl+shift+u
 - Mute/unmute: ctrl+shift+m
