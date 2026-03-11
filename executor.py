@@ -500,9 +500,24 @@ def _close_app(name):
         "edge": "msedge",
         "vs code": "Code",
         "vscode": "Code",
+        "whatsapp": "WhatsApp",
     }
     process_name = process_map.get(name_lower, name_lower)
-    print(f"🛑 Closing: {process_name}")
+    
+    print(f"🛑 Attempting to close: {name_lower} (Process: {process_name})")
+    
+    # Stage 1: Try a graceful close via Alt+F4 first
+    # This is more natural for apps like WhatsApp
+    try:
+        import pyautogui
+        # We assume the app is or should be focused.
+        # Often open_app brings it to focus, so close_app after works well.
+        pyautogui.hotkey("alt", "f4")
+        time.sleep(0.5)
+    except Exception:
+        pass
+
+    # Stage 2: Force stop the process
     subprocess.run(
         ["powershell", "-Command", f"Stop-Process -Name '{process_name}' -Force -ErrorAction SilentlyContinue"],
         capture_output=True,

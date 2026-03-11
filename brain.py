@@ -220,6 +220,11 @@ RULES
 - "play_spotify" is a single dedicated action that handles everything (opening, searching, and clicking).
 - FOR PAUSE/PLAY/RESUME: Use "media_control" with command "pause" or "play".
 - FOR NEXT/SKIP: Use "media_control" with command "next".
+- FOR CLOSING APPS: 
+  1. Try "close_app" with the app name first.
+  2. If the user mentions "clicking the close button", use "click_element" with "Close" or "X".
+  3. You can also use "key_press" with "alt+f4" as a universal way to close the active window.
+  Example: User says "Close WhatsApp" -> [{"action": "close_app", "parameters": {"name": "whatsapp"}, "spoken_response": "Closing WhatsApp."}]
 """
 
 

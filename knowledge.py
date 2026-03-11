@@ -13,12 +13,13 @@ If asked to text/call someone on WhatsApp:
 2. wait 5 seconds (it takes time to load)
 3. key_press "ctrl+f", wait 1 sec (focuses search box on Desktop App)
 4. type_text "<contact name>"
-5. wait 2 seconds (for search results)
-6. key_press "tab", wait 0.5 sec, key_press "enter" (focus and open chat)
-7. wait 1 second
+5. wait 2.5 seconds (VERY IMPORTANT for results to populate)
+6. key_press "down", wait 0.5 sec, key_press "enter" (The 'down' key precisely selects the first result)
+7. wait 1.5 seconds (wait for chat to load)
 8. For messages: type_text "<message>", wait 1, key_press "enter"
-   For audio call: key_press "ctrl+shift+a" (WhatsApp Desktop shortcut for voice call)
-   For video call: key_press "ctrl+shift+v" (WhatsApp Desktop shortcut for video call)
+   For audio call: key_press "ctrl+shift+a"
+   For video call: key_press "ctrl+shift+v"
+NOTE: If searching doesn't work, BEND should try click_element "<contact name>" to visually pick the result from the list.
 
 Other WhatsApp Shortcuts:
 - New chat: ctrl+n

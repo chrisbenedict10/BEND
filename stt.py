@@ -16,6 +16,7 @@ import keyboard
 import speech_recognition as sr
 import pyaudio
 import wave
+import time
 from difflib import SequenceMatcher
 import config
 
@@ -175,6 +176,31 @@ def _extract_command_after_wake(text_lower, matched_alias):
     return None
 
 
+def _robust_recognize_google(audio, language="en-IN"):
+    """
+    Helper to perform Google STT recognition with built-in retries and 
+    cleaner error handling for timeouts and connection failures.
+    """
+    import socket
+    import http.client
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Use a slightly more aggressive timeout for the individual request (default can be very long)
+            return _recognizer.recognize_google(audio, language=language)
+        except (socket.timeout, ConnectionResetError, sr.RequestError) as e:
+            if attempt < max_retries - 1:
+                wait_time = 1.5 * (attempt + 1)
+                print(f"⚠️  STT Connection flicker... (Attempt {attempt+1}/{max_retries}). Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+            else:
+                raise e # Re-raise on final failure
+        except Exception as e:
+            # Any other serious error (like 401 Unauthorized or 429 Rate Limit)
+            raise e
+
 def listen_hold_to_talk(key="enter"):
     """
     Record audio while Enter is held down. Uses raw PyAudio for maximum
@@ -203,13 +229,13 @@ def listen_hold_to_talk(key="enter"):
         data = stream.read(CHUNK, exception_on_overflow=False)
         frames.append(data)
 
-    print("⏹️  Stopped recording.")
+    print("⏹️ Stopped recording.")
     stream.stop_stream()
     stream.close()
     p.terminate()
 
     if not frames:
-        print("⚠️  No audio captured. Did you hold the key long enough?")
+        print("⚠️ No audio captured. Did you hold the key long enough?")
         return None
 
     # Build a proper WAV buffer
@@ -222,20 +248,18 @@ def listen_hold_to_talk(key="enter"):
     wav_buffer.seek(0)
 
     print("⏳ Transcribing...")
-    recognizer = sr.Recognizer()
     with sr.AudioFile(wav_buffer) as source:
-        audio = recognizer.record(source)
+        audio = _recognizer.record(source)
 
-    # Try Google STT with language hint for English
     try:
-        text = recognizer.recognize_google(audio, language="en-IN")  # en-IN = Indian English accent
+        text = _robust_recognize_google(audio, language="en-IN")
         print(f'📝 You said: "{text}"')
         return text
     except sr.UnknownValueError:
         print("❓ Couldn't understand. Please speak clearly into your mic.")
         return None
-    except sr.RequestError as e:
-        print(f"❌ STT API error (check internet): {e}")
+    except Exception as e:
+        print(f"❌ Connection error: {e}")
         return None
 
 
@@ -266,9 +290,12 @@ def listen_continuously(wake_phrase=config.WAKE_PHRASE):
                 listen_count += 1
 
                 try:
-                    text_all = _recognizer.recognize_google(audio, language="en-IN")
+                    text_all = _robust_recognize_google(audio, language="en-IN")
+                    if not text_all:
+                        continue
+                        
                     text_lower = text_all.lower().strip()
-                    print(f"   🗣️  Heard: \"{text_all}\"")
+                    print(f"   🗣️ Heard: \"{text_all}\"")
 
                     # Use the new fuzzy wake word matching engine
                     matched_alias, confidence = _fuzzy_wake_match(text_lower)
@@ -294,8 +321,10 @@ def listen_continuously(wake_phrase=config.WAKE_PHRASE):
                     # Print a dot every 5 cycles so the user knows BEND is alive
                     if listen_count % 5 == 0:
                         print(f"   💤 Still listening... (cycle {listen_count})")
-                except sr.RequestError as e:
-                    print(f"❌ STT API Error: {e}")
+                except Exception as e:
+                    print(f"❌ STT Recognition Failed: {e}")
+                    # Brief pause after a heavy failure to avoid rapid-fire errors
+                    time.sleep(2)
 
             except sr.WaitTimeoutError:
                 # Also print heartbeat to confirm BEND is awake
@@ -328,14 +357,14 @@ def listen(timeout=8, phrase_time_limit=15):
             return None
 
     try:
-        text = _recognizer.recognize_google(audio, language="en-IN")
+        text = _robust_recognize_google(audio, language="en-IN")
         print(f'📝 You said: "{text}"')
         return text
     except sr.UnknownValueError:
         print("❓ Couldn't understand. Try speaking more clearly or closer to the mic.")
         return None
-    except sr.RequestError as e:
-        print(f"❌ Google STT API error (check internet): {e}")
+    except Exception as e:
+        print(f"❌ Google STT API error: {e}")
         return None
 
 
